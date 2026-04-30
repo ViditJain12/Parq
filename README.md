@@ -44,19 +44,9 @@ The app is designed to be fast, simple, and useful in real situations like stree
 
 Parq estimates how long it will take to walk back to the parked car. It then uses a safety buffer to decide when the user should leave.
 
-Buffer logic:
-
-- Under 5 minute walk: 2 minute buffer
-- 5 to 15 minute walk: 5 minute buffer
-- Over 15 minute walk: 7 minute buffer
-
 Example:
 
-If parking expires in 20 minutes and the user is 10 minutes away, Parq adds a 5 minute buffer and alerts the user 15 minutes before expiry.
-
-## Screenshots
-
-Screenshots coming soon.
+If parking expires in 20 minutes and the user is 10 minutes away, Parq adds a X minute buffer and alerts the user Y minutes before expiry.
 
 ## Project Structure
 
