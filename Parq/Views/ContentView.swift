@@ -33,6 +33,10 @@ struct ContentView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 32)
                 }
+
+                if viewModel.showUsagePaywall {
+                    usagePaywallOverlay
+                }
             }
             .navigationBarHidden(true)
             .sheet(isPresented: $viewModel.showTimerSheet) {
@@ -49,6 +53,16 @@ struct ContentView: View {
                     isShowingImagePicker = false
                 }
                 .ignoresSafeArea()
+            }
+            .sheet(isPresented: $viewModel.showShareSheet) {
+                ShareSheetView(
+                    activityItems: [
+                        "I’m using Parq to remember where I parked. Check it out."
+                    ],
+                    onComplete: { completed in
+                        viewModel.completeShareUnlock(didComplete: completed)
+                    }
+                )
             }
             .confirmationDialog("Parking Photo", isPresented: $isShowingPhotoSourceDialog, titleVisibility: .visible) {
                 if UIImagePickerController.isSourceTypeAvailable(.camera) {
@@ -74,6 +88,18 @@ struct ContentView: View {
                 if viewModel.parkingSpot != nil {
                     viewModel.refreshWalkingEstimate()
                 }
+            }
+            .alert("Parq", isPresented: Binding(
+                get: { viewModel.purchaseStatusMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.purchaseStatusMessage = nil
+                    }
+                }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(viewModel.purchaseStatusMessage ?? "")
             }
         }
     }
@@ -105,7 +131,24 @@ struct ContentView: View {
         HStack(alignment: .top) {
             Text("Parq")
                 .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(headerForegroundStyle)
+        }
+    }
+
+    private var headerForegroundStyle: AnyShapeStyle {
+        if viewModel.usageManager.isLifetimeUnlocked {
+            AnyShapeStyle(
+                LinearGradient(
+                    colors: [
+                        Color(red: 1.0, green: 0.90, blue: 0.50),
+                        Color(red: 0.96, green: 0.72, blue: 0.24)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        } else {
+            AnyShapeStyle(Color.white)
         }
     }
 
@@ -209,6 +252,22 @@ struct ContentView: View {
             }
             .padding(.top, 36)
 
+            if !viewModel.usageManager.isLifetimeUnlocked {
+                Text(viewModel.remainingSessionsText)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.accentBlueBright)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Theme.card.opacity(0.92))
+                            .overlay {
+                                Capsule(style: .continuous)
+                                    .stroke(Theme.cardBorder, lineWidth: 1)
+                            }
+                    )
+            }
+
             Button {
                 viewModel.startParkingFlow()
             } label: {
@@ -275,6 +334,122 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 40)
+    }
+
+    private var usagePaywallOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.62)
+                .ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                VStack(spacing: 8) {
+                    Text("Free Sessions Used")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(.white)
+
+                    Text("You’ve used all of your free parking sessions.")
+                        .font(.subheadline)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Theme.secondaryText)
+                }
+
+                VStack(spacing: 12) {
+                    Text("Unlock Parq forever for \(viewModel.lifetimePriceText)")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+
+                    Button {
+                        viewModel.purchaseLifetimeUnlock()
+                    } label: {
+                        Group {
+                            if viewModel.isProcessingPurchase {
+                                ProgressView()
+                                    .tint(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                            } else {
+                                Text("Unlock Lifetime")
+                                    .font(.headline.weight(.semibold))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                            }
+                        }
+                        .background(
+                            LinearGradient(
+                                colors: [Theme.accentBlueBright, Theme.accentBlue],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isProcessingPurchase)
+
+                    Button {
+                        viewModel.restoreLifetimeUnlock()
+                    } label: {
+                        Text("Restore Purchase")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Theme.secondaryText)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isProcessingPurchase)
+
+                    if viewModel.canShareForExtraSession {
+                        Text("or")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.secondaryText)
+
+                        Button {
+                            viewModel.startShareUnlockFlow()
+                        } label: {
+                            VStack(spacing: 4) {
+                                Text("Share Parq for 1 More Session")
+                                    .font(.headline.weight(.semibold))
+                                Text("\(viewModel.shareUnlocksRemaining) bonus share unlock\(viewModel.shareUnlocksRemaining == 1 ? "" : "s") remaining")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.white.opacity(0.78))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(Theme.card.opacity(0.96))
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .stroke(Theme.cardBorder, lineWidth: 1)
+                            }
+                            .foregroundStyle(.white)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Button {
+                    viewModel.showUsagePaywall = false
+                } label: {
+                    Text("Not Now")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Theme.secondaryText)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(24)
+            .frame(maxWidth: 360)
+            .background(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(Theme.backgroundSecondary.opacity(0.98))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .stroke(Theme.cardBorder, lineWidth: 1)
+                    }
+            )
+            .padding(.horizontal, 24)
+        }
+        .transition(.opacity)
     }
 
     private func parkedTimePill(for spot: ParkingSpot) -> some View {

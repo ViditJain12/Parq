@@ -2,6 +2,7 @@ import CoreLocation
 import Combine
 import Foundation
 import MapKit
+import StoreKit
 import UIKit
 
 @MainActor
@@ -12,17 +13,27 @@ final class ParkingViewModel: ObservableObject {
     @Published var leaveByTime: Date?
     @Published var safetyBufferTime: TimeInterval?
     @Published var showTimerSheet = false
+    @Published var showUsagePaywall = false
+    @Published var showShareSheet = false
     @Published var errorMessage: String?
     @Published var isFetchingLocation = false
+    @Published var purchaseStatusMessage: String?
 
     let locationManager = LocationManager()
+    let usageManager: UsageManager
+    let storeKitManager: StoreKitManager
 
     private let storage = ParkingStorage()
     private let photoStorage = ParkingPhotoStorage()
     private let notificationManager = NotificationManager()
     private var cancellables = Set<AnyCancellable>()
 
-    init() {
+    init(
+        usageManager: UsageManager? = nil,
+        storeKitManager: StoreKitManager? = nil
+    ) {
+        self.usageManager = usageManager ?? UsageManager()
+        self.storeKitManager = storeKitManager ?? StoreKitManager()
         parkingSpot = storage.load()
         if let filename = parkingSpot?.photoFilename {
             parkingPhoto = photoStorage.loadParkingPhoto(filename: filename)
@@ -30,6 +41,8 @@ final class ParkingViewModel: ObservableObject {
         locationManager.requestPermission()
         notificationManager.requestPermission()
         bindLocationUpdates()
+        bindStoreKitUpdates()
+        syncLifetimeEntitlementsOnLaunch()
 
         if parkingSpot != nil {
             refreshWalkingEstimate()
@@ -39,11 +52,23 @@ final class ParkingViewModel: ObservableObject {
     func startParkingFlow() {
         errorMessage = nil
         showTimerSheet = false
+
+        guard usageManager.canStartNewSession else {
+            showUsagePaywall = true
+            return
+        }
+
         isFetchingLocation = true
         locationManager.requestCurrentLocation()
     }
 
     func saveParkingSpot(minutes: Int) {
+        guard usageManager.canStartNewSession else {
+            showUsagePaywall = true
+            showTimerSheet = false
+            return
+        }
+
         guard let location = locationManager.currentLocation else {
             errorMessage = "Could not get your current location. Try again."
             return
@@ -67,9 +92,11 @@ final class ParkingViewModel: ObservableObject {
         walkingTimeEstimate = nil
         leaveByTime = nil
         safetyBufferTime = nil
+        usageManager.consumeSession()
         storage.save(spot)
         notificationManager.scheduleParkingNotifications(expiresAt: expiresAt)
         showTimerSheet = false
+        showUsagePaywall = false
 
         updateWalkingEstimate(from: location, to: spot)
         enrichParkingSpotAddress(for: location, baseSpot: spot)
@@ -105,6 +132,70 @@ final class ParkingViewModel: ObservableObject {
         parkingSpot = spot
         parkingPhoto = photoStorage.loadParkingPhoto(filename: filename) ?? image
         storage.save(spot)
+    }
+
+    func startShareUnlockFlow() {
+        guard usageManager.canShareForExtraSession else { return }
+        showShareSheet = true
+    }
+
+    func completeShareUnlock(didComplete: Bool) {
+        showShareSheet = false
+
+        guard didComplete else { return }
+
+        if usageManager.unlockSessionViaShare() {
+            showUsagePaywall = false
+        }
+    }
+
+    func purchaseLifetimeUnlock() {
+        Task {
+            let didUnlock = await storeKitManager.purchaseLifetimeUnlock()
+
+            if didUnlock {
+                usageManager.unlockLifetime()
+                showUsagePaywall = false
+                purchaseStatusMessage = "Parq Lifetime unlocked."
+            }
+        }
+    }
+
+    func restoreLifetimeUnlock() {
+        Task {
+            let didRestore = await storeKitManager.restorePurchases()
+
+            if didRestore {
+                usageManager.unlockLifetime()
+                showUsagePaywall = false
+                purchaseStatusMessage = "Lifetime purchase restored."
+            }
+        }
+    }
+
+    var remainingSessionsText: String {
+        if usageManager.isLifetimeUnlocked {
+            return "Unlimited sessions unlocked"
+        }
+
+        let count = usageManager.remainingSessions
+        return count == 1 ? "1 free session left" : "\(count) free sessions left"
+    }
+
+    var canShareForExtraSession: Bool {
+        usageManager.canShareForExtraSession
+    }
+
+    var shareUnlocksRemaining: Int {
+        max(0, usageManager.maxShareUnlocks - usageManager.shareUnlockCount)
+    }
+
+    var lifetimePriceText: String {
+        storeKitManager.lifetimePriceText
+    }
+
+    var isProcessingPurchase: Bool {
+        storeKitManager.isPurchasing || storeKitManager.isRestoring
     }
 
     func refreshWalkingEstimate() {
@@ -159,6 +250,37 @@ final class ParkingViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+    }
+
+    private func bindStoreKitUpdates() {
+        storeKitManager.$isLifetimeUnlocked
+            .receive(on: RunLoop.main)
+            .sink { [weak self] isUnlocked in
+                guard let self else { return }
+                self.usageManager.setLifetimeUnlocked(isUnlocked)
+
+                if isUnlocked {
+                    self.showUsagePaywall = false
+                }
+            }
+            .store(in: &cancellables)
+
+        storeKitManager.$errorMessage
+            .receive(on: RunLoop.main)
+            .sink { [weak self] message in
+                guard let self, let message else { return }
+                self.purchaseStatusMessage = message
+                self.storeKitManager.clearError()
+            }
+            .store(in: &cancellables)
+    }
+
+    private func syncLifetimeEntitlementsOnLaunch() {
+        Task { [weak self] in
+            guard let self else { return }
+            await self.storeKitManager.syncStartupState()
+            self.usageManager.setLifetimeUnlocked(self.storeKitManager.isLifetimeUnlocked)
+        }
     }
 
     func openDirections() {
