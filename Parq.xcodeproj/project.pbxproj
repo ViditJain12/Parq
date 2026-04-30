@@ -256,6 +256,9 @@
 				DEVELOPMENT_TEAM = 5DDT85NNXZ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Parq uses your camera to save a quick photo of where you parked.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Parq needs your location to save where your car is parked.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Parq uses your photo library so you can attach a parking reference photo.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -288,6 +291,9 @@
 				DEVELOPMENT_TEAM = 5DDT85NNXZ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Parq uses your camera to save a quick photo of where you parked.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Parq needs your location to save where your car is parked.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Parq uses your photo library so you can attach a parking reference photo.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

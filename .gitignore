@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+*.swp
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# CocoaPods / Carthage
+Pods/
+Carthage/Build/
+
+# Local environment / secrets
+.env
+.env.*
+*.env
+Secrets.plist
+GoogleService-Info.plist
+Config.plist
+LocalConfig.plist
+APIKeys.plist
+*.key
+*.pem
+*.p8
+
+# StoreKit local testing
+*.storekit
+
+# Archives / app exports
+*.ipa
+*.dSYM.zip
+*.dSYM
+EOF
